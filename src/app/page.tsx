@@ -22,11 +22,17 @@ export default function Home() {
   const [cafes, setCafes] = useState<Cafe[]>([])
   const markersRef = useRef<mapboxgl.Marker[]>([])
 
-  // 地図の初期中心座標と、位置情報の読み込み完了フラグ
   const [center, setCenter] = useState<[number, number] | null>(null)
   const [isLocationLoaded, setIsLocationLoaded] = useState<boolean>(false)
 
-  // 1. まず最初にユーザーの現在地を取得する
+  // 投稿モーダル用のステート
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false)
+  const [cafeName, setCafeName] = useState<string>('')
+  const [hasOutlet, setHasOutlet] = useState<boolean>(true)
+  const [hasWifi, setHasWifi] = useState<boolean>(true)
+  const [currentPosition, setCurrentPosition] = useState<{ lat: number; lng: number } | null>(null)
+
+  // 1. 現在地取得
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -34,28 +40,28 @@ export default function Home() {
           const userLng = position.coords.longitude
           const userLat = position.coords.latitude
           setCenter([userLng, userLat])
+          setCurrentPosition({ lat: userLat, lng: userLng })
           setIsLocationLoaded(true)
         },
         (error) => {
           console.log('位置情報の取得に失敗しました:', error.message)
-          // 取得失敗時はデフォルトで東京駅を設定
           setCenter([139.7671, 35.6812])
+          setCurrentPosition({ lat: 35.6812, lng: 139.7671 })
           setIsLocationLoaded(true)
         }
       )
     } else {
-      // Geolocation非対応の場合
       setCenter([139.7671, 35.6812])
+      setCurrentPosition({ lat: 35.6812, lng: 139.7671 })
       setIsLocationLoaded(true)
     }
   }, [])
 
-  // 2. 現在地（またはフォールバック座標）が決まってから、最初からその場所で地図を初期化する
+  // 2. 地図初期化
   useEffect(() => {
     if (!isLocationLoaded || !center || map.current) return
     if (!mapContainer.current) return
 
-    // 最初から現在地を中心にして地図を作成
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/streets-v12',
@@ -70,20 +76,21 @@ export default function Home() {
       .addTo(map.current)
   }, [isLocationLoaded, center])
 
-  // 3. Supabaseからカフェデータを取得する
-  useEffect(() => {
-    async function fetchCafes() {
-      const { data, error } = await supabase.from('cafes').select('*')
-      if (error) {
-        console.error('カフェデータの取得に失敗しました:', error)
-      } else if (data) {
-        setCafes(data)
-      }
+  // 3. カフェデータ取得関数
+  const fetchCafes = async () => {
+    const { data, error } = await supabase.from('cafes').select('*')
+    if (error) {
+      console.error('カフェデータの取得に失敗しました:', error)
+    } else if (data) {
+      setCafes(data)
     }
+  }
+
+  useEffect(() => {
     fetchCafes()
   }, [])
 
-  // 4. 取得したカフェデータを地図上にピンとして配置する
+  // 4. 取得したカフェデータを地図上にピンとして配置
   useEffect(() => {
     if (!map.current) return
 
@@ -108,14 +115,110 @@ export default function Home() {
     })
   }, [cafes])
 
+  // 5. カフェ登録の送信処理
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!cafeName.trim() || !currentPosition) return
+
+    const { error } = await supabase.from('cafes').insert([
+      {
+        name: cafeName,
+        latitude: currentPosition.lat,
+        longitude: currentPosition.lng,
+        has_outlet: hasOutlet,
+        has_wifi: hasWifi,
+      },
+    ])
+
+    if (error) {
+      console.error('登録エラー:', error)
+      alert('登録に失敗しました')
+    } else {
+      alert('カフェを登録しました！')
+      setCafeName('')
+      setHasOutlet(true)
+      setHasWifi(true)
+      setIsModalOpen(false)
+      fetchCafes() // データを再取得してピンを更新
+    }
+  }
+
   return (
     <main className="relative w-full h-screen">
       <div ref={mapContainer} className="w-full h-full" />
 
-      <div className="absolute top-4 left-4 bg-white p-4 rounded-lg shadow-md z-10">
-        <h1 className="font-bold text-lg text-gray-800">電源・Wi-Fiカフェ検索</h1>
-        <p className="text-sm text-gray-600">登録店舗数: {cafes.length}件</p>
+      {/* 左上の情報カード ＆ 登録ボタン */}
+      <div className="absolute top-4 left-4 bg-white p-4 rounded-lg shadow-md z-10 flex flex-col gap-3">
+        <div>
+          <h1 className="font-bold text-lg text-gray-800">電源・Wi-Fiカフェ検索</h1>
+          <p className="text-sm text-gray-600">登録店舗数: {cafes.length}件</p>
+        </div>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2 px-4 rounded-md transition shadow-sm"
+        >
+          ＋ 現在地にカフェを登録
+        </button>
       </div>
+
+      {/* 新規登録モーダル */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">新規カフェ登録</h2>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">店舗名</label>
+                <input
+                  type="text"
+                  value={cafeName}
+                  onChange={(e) => setCafeName(e.target.value)}
+                  placeholder="例: カフェ・ベローチェ 天神店"
+                  required
+                  className="w-full border border-gray-300 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2 pt-1">
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={hasOutlet}
+                    onChange={(e) => setHasOutlet(e.target.checked)}
+                    className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                  />
+                  コンセントあり
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={hasWifi}
+                    onChange={(e) => setHasWifi(e.target.checked)}
+                    className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                  />
+                  Wi-Fiあり
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-medium py-2 px-4 rounded-md transition"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded-md transition"
+                >
+                  登録する
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
