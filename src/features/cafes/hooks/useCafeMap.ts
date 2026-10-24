@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
+import 'mapbox-gl/dist/mapbox-gl.css'
 import {
   CAFE_MARKER_COLOR,
   CURRENT_LOCATION_MARKER_COLOR,
@@ -54,10 +55,13 @@ export function useCafeMap(cafes: Cafe[], center: Coordinates | null) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const markersRef = useRef<mapboxgl.Marker[]>([])
+  const currentLocationMarkerRef = useRef<mapboxgl.Marker | null>(null)
   const [isMapReady, setIsMapReady] = useState(false)
 
+  // 1. 地図の初期化
   useEffect(() => {
     if (!center || !containerRef.current) return
+    if (mapRef.current) return // すでに初期化されている場合はスキップ
 
     const map = new mapboxgl.Map({
       container: containerRef.current,
@@ -77,25 +81,45 @@ export function useCafeMap(cafes: Cafe[], center: Coordinates | null) {
       setIsMapReady(true)
     })
 
-    new mapboxgl.Marker({ color: CURRENT_LOCATION_MARKER_COLOR })
-      .setLngLat(center)
-      .setPopup(new mapboxgl.Popup().setDOMContent(createCurrentLocationPopup()))
-      .addTo(map)
-
     return () => {
       markersRef.current.forEach((marker) => marker.remove())
       markersRef.current = []
+      if (currentLocationMarkerRef.current) {
+        currentLocationMarkerRef.current.remove()
+        currentLocationMarkerRef.current = null
+      }
       map.remove()
       mapRef.current = null
       setIsMapReady(false)
     }
   }, [center])
 
+  // 2. 現在地（青ピン）の配置
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !isMapReady || !center) return
+
+    // 既存の現在地ピンがあれば削除して置き直す
+    if (currentLocationMarkerRef.current) {
+      currentLocationMarkerRef.current.remove()
+    }
+
+    currentLocationMarkerRef.current = new mapboxgl.Marker({ color: CURRENT_LOCATION_MARKER_COLOR })
+      .setLngLat(center)
+      .setPopup(new mapboxgl.Popup().setDOMContent(createCurrentLocationPopup()))
+      .addTo(map)
+  }, [isMapReady, center])
+
+  // 3. カフェ（赤ピン）の配置・更新
   useEffect(() => {
     const map = mapRef.current
     if (!map || !isMapReady) return
 
+    // 既存のカフェピンをクリア
     markersRef.current.forEach((marker) => marker.remove())
+    markersRef.current = []
+
+    // 新しくピンを配置
     markersRef.current = cafes.map((cafe) =>
       new mapboxgl.Marker({ color: CAFE_MARKER_COLOR })
         .setLngLat([cafe.longitude, cafe.latitude])
