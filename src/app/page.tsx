@@ -32,6 +32,9 @@ export default function Home() {
   const [hasWifi, setHasWifi] = useState<boolean>(true)
   const [currentPosition, setCurrentPosition] = useState<{ lat: number; lng: number } | null>(null)
 
+  // 一覧リスト表示用のステート
+  const [isListOpen, setIsListOpen] = useState<boolean>(false)
+
   // 1. 現在地取得
   useEffect(() => {
     if (navigator.geolocation) {
@@ -127,6 +130,19 @@ export default function Home() {
     })
   }, [cafes])
 
+  // 現在地に地図を移動させる関数
+  const handleFlyToCurrentLocation = () => {
+    if (!map.current || !center) return
+    map.current.flyTo({ center: center, zoom: 14, essential: true })
+  }
+
+  // リストから特定のカフェを選択したときに地図をそこに移動してポップアップを開く関数
+  const handleSelectCafe = (cafe: Cafe) => {
+    if (!map.current) return
+    map.current.flyTo({ center: [cafe.longitude, cafe.latitude], zoom: 16, essential: true })
+    setIsListOpen(false) // リストを閉じる
+  }
+
   // 5. カフェ登録の送信処理
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -151,7 +167,7 @@ export default function Home() {
       setHasOutlet(true)
       setHasWifi(true)
       setIsModalOpen(false)
-      fetchCafes() // データを再取得してピンを更新
+      fetchCafes()
     }
   }
 
@@ -159,19 +175,73 @@ export default function Home() {
     <main className="relative w-full h-screen">
       <div ref={mapContainer} className="w-full h-full" />
 
-      {/* 左上の情報カード ＆ 登録ボタン */}
-      <div className="absolute top-4 left-4 bg-white p-4 rounded-lg shadow-md z-10 flex flex-col gap-3">
+      {/* 左上の情報カード ＆ アクションボタン群 */}
+      <div className="absolute top-4 left-4 bg-white p-4 rounded-lg shadow-md z-10 flex flex-col gap-3 w-64">
         <div>
           <h1 className="font-bold text-lg text-gray-800">電源・Wi-Fiカフェ検索</h1>
           <p className="text-sm text-gray-600">登録店舗数: {cafes.length}件</p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2 px-4 rounded-md transition shadow-sm"
-        >
-          ＋ 現在地にカフェを登録
-        </button>
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2 px-3 rounded-md transition shadow-sm text-center"
+          >
+            ＋ 現在地にカフェを登録
+          </button>
+          <button
+            onClick={() => setIsListOpen(true)}
+            className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-semibold py-2 px-3 rounded-md transition border border-gray-300 text-center"
+          >
+            📋 登録カフェ一覧を見る
+          </button>
+        </div>
       </div>
+
+      {/* 右上の現在地に戻るボタン */}
+      <button
+        onClick={handleFlyToCurrentLocation}
+        className="absolute top-4 right-4 bg-white hover:bg-gray-100 text-gray-800 p-3 rounded-full shadow-md z-10 transition border border-gray-200 flex items-center justify-center"
+        title="現在地に戻る"
+      >
+        📍
+      </button>
+
+      {/* 登録カフェ一覧モーダル / サイドパネル */}
+      {isListOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg shadow-xl max-h-[80vh] flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-800">登録カフェ一覧 ({cafes.length}件)</h2>
+              <button
+                onClick={() => setIsListOpen(false)}
+                className="text-gray-500 hover:text-gray-700 font-bold text-lg px-2"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="overflow-y-auto flex flex-col gap-3 pr-1">
+              {cafes.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-6">登録されているカフェはありません。</p>
+              ) : (
+                cafes.map((cafe) => (
+                  <div
+                    key={cafe.id}
+                    onClick={() => handleSelectCafe(cafe)}
+                    className="p-3 border border-gray-200 rounded-lg hover:bg-blue-50 cursor-pointer transition flex flex-col gap-1 shadow-sm"
+                  >
+                    <h3 className="font-bold text-gray-800 text-base">{cafe.name}</h3>
+                    <div className="flex gap-4 text-xs text-gray-600">
+                      <span>🔌 コンセント: {cafe.has_outlet ? 'あり ✅' : 'なし ❌'}</span>
+                      <span>📶 Wi-Fi: {cafe.has_wifi ? 'あり ✅' : 'なし ❌'}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 新規登録モーダル */}
       {isModalOpen && (
@@ -187,7 +257,8 @@ export default function Home() {
                   onChange={(e) => setCafeName(e.target.value)}
                   placeholder="例: カフェ・ベローチェ 天神店"
                   required
-                  className="w-full border border-gray-300 rounded-md p-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"                />
+                  className="w-full border border-gray-300 rounded-md p-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
 
               <div className="flex flex-col gap-2 pt-1">
