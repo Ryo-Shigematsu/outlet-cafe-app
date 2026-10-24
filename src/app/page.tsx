@@ -175,8 +175,7 @@ export default function Home() {
                   onChange={(e) => setCafeName(e.target.value)}
                   placeholder="例: カフェ・ベローチェ 天神店"
                   required
-                  className="w-full border border-gray-300 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                  className="w-full border border-gray-300 rounded-md p-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"                />
               </div>
 
               <div className="flex flex-col gap-2 pt-1">
