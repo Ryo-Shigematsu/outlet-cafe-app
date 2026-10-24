@@ -57,22 +57,34 @@ export default function Home() {
     }
   }, [])
 
-  // 2. 地図初期化
+  // 2. 地図初期化（日本語化対応含む）
   useEffect(() => {
     if (!isLocationLoaded || !center || map.current) return
     if (!mapContainer.current) return
 
-    map.current = new mapboxgl.Map({
+    const mapInstance = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/streets-v12',
       center: center,
       zoom: 14,
     })
 
-    // 現在地に青いピンを立てる
+    // 地図のラベルを日本語に設定
+    mapInstance.on('load', () => {
+      try {
+        mapInstance.setLanguage('ja')
+      } catch (e) {
+        console.error('言語設定に失敗しました:', e)
+      }
+    })
+
+    map.current = mapInstance
+
+    // 現在地に青いピンを立てる（文字色をダークグレーにして可視性を改善）
+    const popupHtml = `<div style="color: #1f2937; font-weight: bold; padding: 4px;">現在地</div>`
     new mapboxgl.Marker({ color: '#3b82f6' })
       .setLngLat(center)
-      .setPopup(new mapboxgl.Popup().setHTML('<h3>現在地</h3>'))
+      .setPopup(new mapboxgl.Popup().setHTML(popupHtml))
       .addTo(map.current)
   }, [isLocationLoaded, center])
 
