@@ -37,27 +37,28 @@ export default function Home() {
 
   // 1. 現在地取得
   useEffect(() => {
-    if (navigator.geolocation) {
+    const locationPromise = new Promise<GeolocationPosition | null>((resolve) => {
+      if (!navigator.geolocation) {
+        resolve(null)
+        return
+      }
+
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const userLng = position.coords.longitude
-          const userLat = position.coords.latitude
-          setCenter([userLng, userLat])
-          setCurrentPosition({ lat: userLat, lng: userLng })
-          setIsLocationLoaded(true)
-        },
+        resolve,
         (error) => {
           console.log('位置情報の取得に失敗しました:', error.message)
-          setCenter([139.7671, 35.6812])
-          setCurrentPosition({ lat: 35.6812, lng: 139.7671 })
-          setIsLocationLoaded(true)
+          resolve(null)
         }
       )
-    } else {
-      setCenter([139.7671, 35.6812])
-      setCurrentPosition({ lat: 35.6812, lng: 139.7671 })
+    })
+
+    locationPromise.then((position) => {
+      const userLng = position?.coords.longitude ?? 139.7671
+      const userLat = position?.coords.latitude ?? 35.6812
+      setCenter([userLng, userLat])
+      setCurrentPosition({ lat: userLat, lng: userLng })
       setIsLocationLoaded(true)
-    }
+    })
   }, [])
 
   // 2. 地図初期化（日本語化対応含む）
@@ -96,13 +97,16 @@ export default function Home() {
     const { data, error } = await supabase.from('cafes').select('*')
     if (error) {
       console.error('カフェデータの取得に失敗しました:', error)
-    } else if (data) {
-      setCafes(data)
+      return null
     }
+
+    return data
   }
 
   useEffect(() => {
-    fetchCafes()
+    fetchCafes().then((data) => {
+      if (data) setCafes(data)
+    })
   }, [])
 
   // 4. 取得したカフェデータを地図上にピンとして配置
@@ -167,7 +171,9 @@ export default function Home() {
       setHasOutlet(true)
       setHasWifi(true)
       setIsModalOpen(false)
-      fetchCafes()
+      fetchCafes().then((data) => {
+        if (data) setCafes(data)
+      })
     }
   }
 
@@ -219,7 +225,7 @@ export default function Home() {
                 ✕
               </button>
             </div>
-            
+
             <div className="overflow-y-auto flex flex-col gap-3 pr-1">
               {cafes.length === 0 ? (
                 <p className="text-sm text-gray-500 text-center py-6">登録されているカフェはありません。</p>
